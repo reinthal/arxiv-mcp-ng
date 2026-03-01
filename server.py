@@ -240,22 +240,7 @@ async def extract_arxiv_id(arxiv_url: str) -> str:
     Example:
         extract_arxiv_id("https://arxiv.org/abs/1706.03762") -> "1706.03762"
     """
-    import re
-
-    # Pattern to match arXiv IDs in various URL formats
-    patterns = [
-        r'arxiv\.org/abs/(\d+\.\d+)',
-        r'arxiv\.org/pdf/(\d+\.\d+)',
-        r'arxiv\.org/e-print/(\d+\.\d+)',
-        r'(\d{4}\.\d{4,5})',  # Just the ID itself
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, arxiv_url)
-        if match:
-            return match.group(1)
-
-    raise ValueError(f"Could not extract arXiv ID from URL: {arxiv_url}")
+    return _extract_arxiv_id_raw(arxiv_url)
 
 
 @mcp.tool()
@@ -300,6 +285,58 @@ _TITLE_STOPWORDS = frozenset({
     "that", "this", "it", "its", "via", "using", "based", "towards", "toward",
 })
 
+# Maximum allowed value for max_results across all search tools
+_MAX_SEARCH_RESULTS = 100
+
+
+def _validate_max_results(max_results: int) -> int:
+    """
+    Validate and clamp max_results to a safe range.
+
+    Args:
+        max_results: Requested number of results
+
+    Returns:
+        Clamped value between 1 and _MAX_SEARCH_RESULTS
+
+    Raises:
+        ValueError: If max_results is not an integer
+    """
+    if not isinstance(max_results, int):
+        raise ValueError(f"max_results must be an integer, got {type(max_results).__name__}")
+    return max(1, min(max_results, _MAX_SEARCH_RESULTS))
+
+
+def _extract_arxiv_id_raw(arxiv_ref: str) -> str:
+    """
+    Extract an arXiv ID from a URL or bare ID string.
+
+    Single source of truth for arXiv ID extraction — used by both the public
+    ``extract_arxiv_id`` tool and ``get_related_papers``.
+
+    Args:
+        arxiv_ref: arXiv URL or bare ID string
+
+    Returns:
+        The extracted arXiv ID (e.g., "1706.03762")
+
+    Raises:
+        ValueError: If no arXiv ID can be found in the input
+    """
+    import re as _re
+
+    patterns = [
+        r'arxiv\.org/abs/(\d+\.\d+)',
+        r'arxiv\.org/pdf/(\d+\.\d+)',
+        r'arxiv\.org/e-print/(\d+\.\d+)',
+        r'(\d{4}\.\d{4,5})',
+    ]
+    for pattern in patterns:
+        match = _re.search(pattern, arxiv_ref)
+        if match:
+            return match.group(1)
+    raise ValueError(f"Could not extract arXiv ID from URL: {arxiv_ref}")
+
 
 def _parse_arxiv_entries(xml_text: str) -> list[dict]:
     """
@@ -311,7 +348,7 @@ def _parse_arxiv_entries(xml_text: str) -> list[dict]:
     Returns:
         List of dicts with keys: id, title, authors, abstract, url, published, categories
     """
-    import xml.etree.ElementTree as ET
+    import defusedxml.ElementTree as ET
     import re as _re
 
     ns = _ARXIV_ATOM_NS
@@ -387,6 +424,8 @@ async def search_arxiv(
         search_arxiv("attention mechanisms", max_results=5, category="cs.AI")
     """
     import httpx
+
+    max_results = _validate_max_results(max_results)
 
     try:
         logger.info(
@@ -470,6 +509,8 @@ async def get_author_papers(
     """
     import httpx
 
+    max_results = _validate_max_results(max_results)
+
     try:
         logger.info(f"Fetching arXiv papers for author: {author_name!r}")
 
@@ -528,23 +569,11 @@ async def get_related_papers(
     import httpx
     import re as _re
 
-    try:
-        # Extract arXiv ID from URL using same patterns as extract_arxiv_id
-        patterns = [
-            r'arxiv\.org/abs/(\d+\.\d+)',
-            r'arxiv\.org/pdf/(\d+\.\d+)',
-            r'arxiv\.org/e-print/(\d+\.\d+)',
-            r'(\d{4}\.\d{4,5})',
-        ]
-        arxiv_id = None
-        for pattern in patterns:
-            match = _re.search(pattern, arxiv_url)
-            if match:
-                arxiv_id = match.group(1)
-                break
+    max_results = _validate_max_results(max_results)
 
-        if not arxiv_id:
-            raise ValueError(f"Could not extract arXiv ID from URL: {arxiv_url}")
+    try:
+        # Extract arXiv ID from URL — delegate to shared helper
+        arxiv_id = _extract_arxiv_id_raw(arxiv_url)
 
         logger.info(f"Fetching metadata for paper {arxiv_id} to find related papers")
 
@@ -600,8 +629,11 @@ async def get_related_papers(
     except httpx.TimeoutException as e:
         logger.error(f"arXiv API request timed out: {e}")
         raise RuntimeError("arXiv API request timed out. Please try again.") from e
-    except (ValueError, RuntimeError):
+    except RuntimeError:
         raise
+    except ValueError as e:
+        logger.error(f"Invalid input for get_related_papers: {e}")
+        raise RuntimeError(str(e)) from e
     except Exception as e:
         logger.error(f"Error finding related papers: {e}")
         raise RuntimeError(f"Failed to find related papers: {str(e)}") from e

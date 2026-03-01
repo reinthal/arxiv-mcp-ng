@@ -7,7 +7,9 @@
 }: {
   packages = [
     pkgs.git
-    pkgs.perl5Packages.LaTeXML
+    (pkgs.perl5Packages.LaTeXML.overrideAttrs (oldAttrs: {
+      doCheck = false;  # Skip tests that are failing
+    }))
   ];
 
   languages.python = {

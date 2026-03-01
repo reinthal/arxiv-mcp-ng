@@ -78,21 +78,21 @@ That's it! uv will automatically:
 - Create a virtual environment
 - Install all dependencies including dev dependencies
 
-**Alternative (without uv):**
-```bash
-pip install -e .
-```
-
 ## Usage
 
 ### Running the Server
 
-**With uv (recommended):**
+**Development mode (with auto-reload and inspector):**
 ```bash
-uv run arxiv-mcp
+uv run fastmcp dev inspector server.py
 ```
 
-Or directly:
+This starts the server with:
+- Auto-reload when you save changes
+- MCP Inspector in your browser for interactive testing
+- Better debugging output
+
+**Production mode:**
 ```bash
 uv run python server.py
 ```
@@ -102,18 +102,12 @@ uv run python server.py
 make run
 ```
 
-**Without uv:**
-```bash
-python server.py
-```
-
 ### Using with Claude Desktop
 
 Add this server to your Claude Desktop configuration:
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Linux: `~/.config/claude/claude_desktop_config.json`
 
-**Using uv (recommended):**
 ```json
 {
   "mcpServers": {
@@ -122,25 +116,15 @@ Add this server to your Claude Desktop configuration:
       "args": [
         "run",
         "--directory",
-        "/absolute/path/to/arxiv-mcp",
-        "arxiv-mcp"
+        "/absolute/path/to/arxiv-mcp-ng",
+        "arxiv-mcp-ng"
       ]
     }
   }
 }
 ```
 
-**Without uv:**
-```json
-{
-  "mcpServers": {
-    "arxiv": {
-      "command": "python",
-      "args": ["/absolute/path/to/arxiv-mcp/server.py"]
-    }
-  }
-}
-```
+Replace `/absolute/path/to/arxiv-mcp-ng` with the actual path to this directory.
 
 After updating the configuration, restart Claude Desktop for the changes to take effect.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FastMCP server for arxiv2md - Convert arXiv papers to Markdown format.
+FastMCP server for arxiv-mcp-ng - Convert arXiv papers to Markdown format.
 
 This server exposes tools to convert arXiv papers from LaTeX source to Markdown
 using the arxiv2md package with centralized rate limiting (3 requests/second).
@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create FastMCP server
-mcp = FastMCP("arxiv2md", dependencies=["arxiv2md", "tenacity"])
+mcp = FastMCP("arxiv-mcp-ng")
 
 
 # ============================================================================

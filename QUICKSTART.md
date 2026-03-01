@@ -23,7 +23,7 @@ Get started with the arXiv MCP server in just a few minutes!
 
 ## Setup
 
-### Option 1: Using uv (Recommended - 2 commands!)
+### Using uv (2 commands!)
 
 ```bash
 # 1. Install dependencies (uv handles Python version, venv, everything)
@@ -38,86 +38,48 @@ That's it! uv automatically:
 - Creates a virtual environment
 - Installs all dependencies (including dev dependencies)
 
-### Option 2: Using devenv (Nix users)
-
-If you're using Nix with devenv:
-
-```bash
-# Enter the development environment
-devenv shell
-
-# Install dependencies
-install
-
-# Run the example
-example
-```
-
-### Option 3: Manual Setup (without uv)
-
-```bash
-# Ensure you have Python 3.10+
-python --version
-
-# Install dependencies
-pip install -e .
-
-# Run the example
-python example_client.py
-```
-
 ## Testing the Server
 
 ### 1. Run the Example Client
 
-**With uv:**
 ```bash
 uv run python example_client.py
 # or use the shortcut
 make example
 ```
 
-**Without uv:**
-```bash
-python example_client.py
-```
-
 This will convert the "Attention Is All You Need" paper and save it to `attention_is_all_you_need.md`.
 
 ### 2. Run Unit Tests
 
-**With uv:**
 ```bash
 uv run pytest -v
 # or
 make test
 ```
 
-**Without uv:**
-```bash
-pytest test_server.py
-```
-
-### 3. See Rate Limiting in Action
+### 3. Demo Rate Limiting
 
 ```bash
 uv run python demo_rate_limit.py
-# or
-make demo
 ```
+
+This demonstrates the 3 requests/second rate limit in action.
 
 ### 4. Start the Server Manually
 
-**With uv:**
+**Development mode (with auto-reload and inspector):**
 ```bash
-uv run arxiv-mcp
-# or
-make run
+uv run fastmcp dev inspector server.py
 ```
 
-**Without uv:**
+This opens the MCP Inspector in your browser for interactive testing.
+
+**Production mode:**
 ```bash
-python server.py
+uv run python server.py
+# or
+make run
 ```
 
 The server will start and wait for MCP client connections.
@@ -130,7 +92,6 @@ The server will start and wait for MCP client connections.
 
 2. **Edit the config file** (create it if it doesn't exist):
 
-   **With uv (recommended):**
    ```json
    {
      "mcpServers": {
@@ -139,27 +100,15 @@ The server will start and wait for MCP client connections.
          "args": [
            "run",
            "--directory",
-           "/absolute/path/to/arxiv-mcp",
-           "arxiv-mcp"
+           "/absolute/path/to/arxiv-mcp-ng",
+           "arxiv-mcp-ng"
          ]
        }
      }
    }
    ```
 
-   **Without uv:**
-   ```json
-   {
-     "mcpServers": {
-       "arxiv": {
-         "command": "python",
-         "args": ["/absolute/path/to/arxiv-mcp/server.py"]
-       }
-     }
-   }
-   ```
-
-   Replace `/absolute/path/to/arxiv-mcp` with the actual path to this directory.
+   Replace `/absolute/path/to/arxiv-mcp-ng` with the actual path to this directory.
 
 3. **Restart Claude Desktop**
 
@@ -185,8 +134,6 @@ Claude will use the `convert_arxiv_to_markdown` tool and return the paper in Mar
 Make sure you've installed the dependencies:
 ```bash
 uv sync
-# or
-pip install -e .
 ```
 
 ### "latexml: command not found"
@@ -212,8 +159,9 @@ All available commands (using uv):
 uv sync              # Install/update dependencies
 
 # Running
-uv run arxiv-mcp     # Start the MCP server
-make run             # Same as above
+uv run python server.py                    # Start the MCP server
+uv run fastmcp dev inspector server.py     # Dev mode with inspector
+make run                                   # Same as production mode
 
 # Testing
 uv run pytest -v     # Run tests

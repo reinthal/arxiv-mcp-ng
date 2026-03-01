@@ -8,13 +8,15 @@ to convert arXiv papers to Markdown format.
 
 import asyncio
 from fastmcp.client import Client
+from fastmcp.client.transports import StdioTransport
 
 
 async def main():
     """Example usage of the arXiv MCP server"""
 
     # Connect to the server (running as a subprocess)
-    async with Client("python server.py") as client:
+    transport = StdioTransport(command="python", args=["server.py"])
+    async with Client(transport) as client:
         print("Connected to arXiv MCP server\n")
 
         # List available tools
@@ -37,14 +39,14 @@ async def main():
         )
 
         paper_data = result.data
-        print(f"\nTitle: {paper_data.get('title', 'N/A')}")
-        print(f"Authors: {', '.join(paper_data.get('authors', []) or ['N/A'])}")
-        print(f"Markdown length: {len(paper_data['markdown'])} characters")
+        print(f"\nTitle: {paper_data.title or 'N/A'}")
+        print(f"Authors: {', '.join(paper_data.authors or ['N/A'])}")
+        print(f"Markdown length: {len(paper_data.markdown)} characters")
 
         # Save to file
         output_file = "attention_is_all_you_need.md"
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write(paper_data['markdown'])
+            f.write(paper_data.markdown)
         print(f"Saved to: {output_file}")
 
         print("\n" + "=" * 60 + "\n")
@@ -72,8 +74,9 @@ async def main():
         )
         urls = result.data
         print("Generated URLs:")
-        for url_type, url in urls.items():
-            print(f"  {url_type}: {url}")
+        print(f"  abstract: {urls.get('abstract', 'N/A')}")
+        print(f"  pdf: {urls.get('pdf', 'N/A')}")
+        print(f"  source: {urls.get('source', 'N/A')}")
 
 
 if __name__ == "__main__":

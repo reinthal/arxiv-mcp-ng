@@ -18,16 +18,43 @@
     uv.enable = true;
   };
 
+  scripts.menu.exec = ''
+    echo ""
+    echo "╭──────────────────────────────────────────────────────────────╮"
+    echo "│                                                              │"
+    echo "│              📚 arXiv MCP Server - Commands                  │"
+    echo "│                                                              │"
+    echo "╰──────────────────────────────────────────────────────────────╯"
+    echo ""
+    echo "🔧 Setup:"
+    echo "  install       Install dependencies with uv sync"
+    echo ""
+    echo "🚀 Running:"
+    echo "  run           Start MCP server (production mode)"
+    echo "  dev           Start MCP server (dev mode with inspector)"
+    echo ""
+    echo "🧪 Testing:"
+    echo "  test          Run tests with pytest"
+    echo "  example       Run example client (converts a paper)"
+    echo "  demo          Demonstrate rate limiting in action"
+    echo ""
+    echo "📋 Other:"
+    echo "  menu          Show this menu"
+    echo ""
+    echo "💡 Tip: Run 'install' first if you haven't set up dependencies yet"
+    echo ""
+  '';
+
   scripts.install.exec = ''
     uv sync
   '';
 
-  scripts.run-server.exec = ''
+  scripts.run.exec = ''
     uv run python server.py
   '';
 
-  scripts.run.exec = ''
-    uv run arxiv-mcp
+  scripts.dev.exec = ''
+    uv run fastmcp dev inspector server.py
   '';
 
   scripts.test.exec = ''
@@ -43,25 +70,20 @@
   '';
 
   enterShell = ''
-    echo "arXiv MCP Server Development Environment"
-    echo "========================================"
     echo ""
-    echo "First time setup:"
-    echo "  install       - Install dependencies with uv"
+    echo "╭──────────────────────────────────────────────────────────────╮"
+    echo "│                                                              │"
+    echo "│       🚀 arXiv MCP Server Development Environment            │"
+    echo "│                                                              │"
+    echo "╰──────────────────────────────────────────────────────────────╯"
     echo ""
-    echo "Available commands:"
-    echo "  run           - Start the MCP server (via entry point)"
-    echo "  run-server    - Start the MCP server (via python)"
-    echo "  test          - Run tests with pytest"
-    echo "  demo          - Run rate limiting demo"
-    echo "  example       - Run example client"
+    echo "Tools installed:"
+    echo "  Python:  $(python --version | cut -d' ' -f2)"
+    echo "  uv:      $(uv --version | cut -d' ' -f2)"
+    echo "  LaTeXML: $(latexml --VERSION 2>&1 | head -1)"
     echo ""
-    echo "Tools:"
-    python --version
-    uv --version
-    latexml --VERSION
+    echo "📋 Type 'menu' to see all available commands"
     echo ""
-    echo "Run 'install' to set up dependencies if not done yet"
   '';
 
   enterTest = ''

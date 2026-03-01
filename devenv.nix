@@ -8,7 +8,7 @@
   packages = [
     pkgs.git
     (pkgs.perl5Packages.LaTeXML.overrideAttrs (oldAttrs: {
-      doCheck = false;  # Skip tests that are failing
+      doCheck = false; # Skip tests that are failing
     }))
   ];
 
@@ -59,7 +59,7 @@
     echo "Tools:"
     python --version
     uv --version
-    latexml --version | head -n 1
+    latexml --VERSION
     echo ""
     echo "Run 'install' to set up dependencies if not done yet"
   '';

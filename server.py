@@ -288,6 +288,311 @@ async def build_arxiv_urls(arxiv_id: str) -> dict[str, str]:
     }
 
 
+# ============================================================================
+# arXiv Search Tools
+# ============================================================================
+
+_ARXIV_API_BASE = "http://export.arxiv.org/api/query"
+_ARXIV_ATOM_NS = "http://www.w3.org/2005/Atom"
+_TITLE_STOPWORDS = frozenset({
+    "a", "an", "the", "of", "in", "on", "at", "to", "for", "and", "or",
+    "is", "are", "was", "were", "be", "been", "with", "from", "by", "as",
+    "that", "this", "it", "its", "via", "using", "based", "towards", "toward",
+})
+
+
+def _parse_arxiv_entries(xml_text: str) -> list[dict]:
+    """
+    Parse arXiv Atom XML response into a list of paper metadata dicts.
+
+    Args:
+        xml_text: Raw Atom XML string from the arXiv API
+
+    Returns:
+        List of dicts with keys: id, title, authors, abstract, url, published, categories
+    """
+    import xml.etree.ElementTree as ET
+    import re as _re
+
+    ns = _ARXIV_ATOM_NS
+    root = ET.fromstring(xml_text)
+    papers = []
+
+    for entry in root.findall(f"{{{ns}}}entry"):
+        raw_id = entry.findtext(f"{{{ns}}}id", "")
+        # Extract ID from full URL and strip version suffix (e.g. "2301.12345v2" -> "2301.12345")
+        arxiv_id = _re.sub(r"v\d+$", "", raw_id.split("/abs/")[-1]) if "/abs/" in raw_id else raw_id
+
+        title_elem = entry.find(f"{{{ns}}}title")
+        title = " ".join((title_elem.text or "").split()) if title_elem is not None else ""
+
+        summary_elem = entry.find(f"{{{ns}}}summary")
+        abstract = " ".join((summary_elem.text or "").split()) if summary_elem is not None else ""
+
+        published_elem = entry.find(f"{{{ns}}}published")
+        published = (published_elem.text or "").strip() if published_elem is not None else ""
+
+        authors = [
+            " ".join((author.findtext(f"{{{ns}}}name", "") or "").split())
+            for author in entry.findall(f"{{{ns}}}author")
+        ]
+
+        categories = [
+            cat.get("term", "")
+            for cat in entry.findall(f"{{{ns}}}category")
+            if cat.get("term")
+        ]
+
+        papers.append({
+            "id": arxiv_id,
+            "title": title,
+            "authors": authors,
+            "abstract": abstract,
+            "url": f"https://arxiv.org/abs/{arxiv_id}",
+            "published": published,
+            "categories": categories,
+        })
+
+    return papers
+
+
+@mcp.tool()
+@rate_limited
+async def search_arxiv(
+    query: str,
+    max_results: int = 10,
+    category: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> list[dict]:
+    """
+    Search for arXiv papers by keyword, category, and date range.
+
+    This tool queries the arXiv API to find papers matching the given search
+    criteria. Results are returned in order of relevance.
+
+    Rate Limited: This tool is subject to a server-wide rate limit of 3 requests/second.
+
+    Args:
+        query: Keyword search query (e.g., "attention mechanisms transformers")
+        max_results: Maximum number of results to return (default: 10)
+        category: arXiv category filter (e.g., "cs.AI", "physics.hep-th")
+        date_from: Start date filter in YYYY-MM-DD format (e.g., "2023-01-01")
+        date_to: End date filter in YYYY-MM-DD format (e.g., "2023-12-31")
+
+    Returns:
+        List of dicts with keys: id, title, authors, abstract, url, published, categories
+
+    Example:
+        search_arxiv("attention mechanisms", max_results=5, category="cs.AI")
+    """
+    import httpx
+
+    try:
+        logger.info(
+            f"Searching arXiv: query={query!r}, category={category}, "
+            f"date_from={date_from}, date_to={date_to}"
+        )
+
+        # Build search query string
+        search_query = f"all:{query}"
+        if category:
+            search_query += f" AND cat:{category}"
+        if date_from or date_to:
+            from_str = date_from.replace("-", "") + "000000" if date_from else "00000000000000"
+            to_str = date_to.replace("-", "") + "235959" if date_to else "99991231235959"
+            search_query += f" AND submittedDate:[{from_str} TO {to_str}]"
+
+        params = {
+            "search_query": search_query,
+            "start": 0,
+            "max_results": max_results,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(_ARXIV_API_BASE, params=params)
+            response.raise_for_status()
+
+        papers = _parse_arxiv_entries(response.text)
+        logger.info(f"Found {len(papers)} papers for query {query!r}")
+        return papers
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"arXiv API request failed with status {e.response.status_code}: {e}")
+        raise RuntimeError(
+            f"Failed to search arXiv. API returned status {e.response.status_code}."
+        ) from e
+    except httpx.TimeoutException as e:
+        logger.error(f"arXiv API request timed out: {e}")
+        raise RuntimeError("arXiv API request timed out. Please try again.") from e
+    except Exception as e:
+        logger.error(f"Error searching arXiv: {e}")
+        raise RuntimeError(f"Failed to search arXiv: {str(e)}") from e
+
+
+@mcp.tool()
+@rate_limited
+async def get_author_papers(
+    author_name: str,
+    max_results: int = 10,
+) -> list[dict]:
+    """
+    Retrieve papers by a specific author from arXiv.
+
+    This tool queries the arXiv API for papers authored by the given name.
+    Results are returned in order of relevance/recency.
+
+    Rate Limited: This tool is subject to a server-wide rate limit of 3 requests/second.
+
+    Args:
+        author_name: Full or partial author name (e.g., "Yoshua Bengio")
+        max_results: Maximum number of results to return (default: 10)
+
+    Returns:
+        List of dicts with keys: id, title, authors, abstract, url, published, categories
+
+    Example:
+        get_author_papers("Yann LeCun", max_results=5)
+    """
+    import httpx
+
+    try:
+        logger.info(f"Fetching arXiv papers for author: {author_name!r}")
+
+        params = {
+            "search_query": f"au:{author_name}",
+            "start": 0,
+            "max_results": max_results,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(_ARXIV_API_BASE, params=params)
+            response.raise_for_status()
+
+        papers = _parse_arxiv_entries(response.text)
+        logger.info(f"Found {len(papers)} papers for author {author_name!r}")
+        return papers
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"arXiv API request failed with status {e.response.status_code}: {e}")
+        raise RuntimeError(
+            f"Failed to retrieve author papers. API returned status {e.response.status_code}."
+        ) from e
+    except httpx.TimeoutException as e:
+        logger.error(f"arXiv API request timed out: {e}")
+        raise RuntimeError("arXiv API request timed out. Please try again.") from e
+    except Exception as e:
+        logger.error(f"Error fetching author papers: {e}")
+        raise RuntimeError(f"Failed to retrieve author papers: {str(e)}") from e
+
+
+@mcp.tool()
+@rate_limited
+async def get_related_papers(
+    arxiv_url: str,
+    max_results: int = 10,
+) -> list[dict]:
+    """
+    Find papers related to a given arXiv paper.
+
+    This tool extracts the paper ID from the given URL, fetches its metadata
+    (title and categories), then searches for related papers using title keywords
+    and the paper's primary category.
+
+    Rate Limited: This tool is subject to a server-wide rate limit of 3 requests/second.
+
+    Args:
+        arxiv_url: An arXiv URL (e.g., "https://arxiv.org/abs/1706.03762")
+        max_results: Maximum number of related papers to return (default: 10)
+
+    Returns:
+        List of dicts with keys: id, title, authors, abstract, url, published, categories
+
+    Example:
+        get_related_papers("https://arxiv.org/abs/1706.03762", max_results=5)
+    """
+    import httpx
+    import re as _re
+
+    try:
+        # Extract arXiv ID from URL using same patterns as extract_arxiv_id
+        patterns = [
+            r'arxiv\.org/abs/(\d+\.\d+)',
+            r'arxiv\.org/pdf/(\d+\.\d+)',
+            r'arxiv\.org/e-print/(\d+\.\d+)',
+            r'(\d{4}\.\d{4,5})',
+        ]
+        arxiv_id = None
+        for pattern in patterns:
+            match = _re.search(pattern, arxiv_url)
+            if match:
+                arxiv_id = match.group(1)
+                break
+
+        if not arxiv_id:
+            raise ValueError(f"Could not extract arXiv ID from URL: {arxiv_url}")
+
+        logger.info(f"Fetching metadata for paper {arxiv_id} to find related papers")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Fetch metadata for the source paper
+            meta_response = await client.get(
+                _ARXIV_API_BASE,
+                params={"id_list": arxiv_id, "max_results": 1},
+            )
+            meta_response.raise_for_status()
+
+        source_papers = _parse_arxiv_entries(meta_response.text)
+        if not source_papers:
+            raise RuntimeError(f"Could not retrieve metadata for arXiv paper {arxiv_id}")
+
+        source = source_papers[0]
+        title = source["title"]
+        categories = source["categories"]
+
+        # Extract meaningful keywords from title (skip stopwords and short words)
+        keywords = [
+            w for w in _re.sub(r"[^a-zA-Z0-9 ]", " ", title).lower().split()
+            if len(w) > 3 and w not in _TITLE_STOPWORDS
+        ][:5]
+
+        if not keywords:
+            raise RuntimeError(f"Could not extract keywords from title: {title!r}")
+
+        # Build related search query from title keywords + primary category
+        search_query = " AND ".join(f"ti:{kw}" for kw in keywords)
+        if categories:
+            search_query += f" AND cat:{categories[0]}"
+
+        logger.info(f"Searching for related papers with query={search_query!r}")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            search_response = await client.get(
+                _ARXIV_API_BASE,
+                params={"search_query": search_query, "start": 0, "max_results": max_results + 1},
+            )
+            search_response.raise_for_status()
+
+        # Exclude the source paper from results
+        related = [p for p in _parse_arxiv_entries(search_response.text) if p["id"] != arxiv_id]
+        logger.info(f"Found {len(related)} related papers for {arxiv_id}")
+        return related[:max_results]
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"arXiv API request failed with status {e.response.status_code}: {e}")
+        raise RuntimeError(
+            f"Failed to find related papers. API returned status {e.response.status_code}."
+        ) from e
+    except httpx.TimeoutException as e:
+        logger.error(f"arXiv API request timed out: {e}")
+        raise RuntimeError("arXiv API request timed out. Please try again.") from e
+    except (ValueError, RuntimeError):
+        raise
+    except Exception as e:
+        logger.error(f"Error finding related papers: {e}")
+        raise RuntimeError(f"Failed to find related papers: {str(e)}") from e
+
+
 def main():
     """Entry point for the MCP server"""
     mcp.run()

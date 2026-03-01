@@ -292,7 +292,7 @@ async def build_arxiv_urls(arxiv_id: str) -> dict[str, str]:
 # arXiv Search Tools
 # ============================================================================
 
-_ARXIV_API_BASE = "http://export.arxiv.org/api/query"
+_ARXIV_API_BASE = "https://export.arxiv.org/api/query"
 _ARXIV_ATOM_NS = "http://www.w3.org/2005/Atom"
 _TITLE_STOPWORDS = frozenset({
     "a", "an", "the", "of", "in", "on", "at", "to", "for", "and", "or",
@@ -399,9 +399,23 @@ async def search_arxiv(
         if category:
             search_query += f" AND cat:{category}"
         if date_from or date_to:
-            from_str = date_from.replace("-", "") + "000000" if date_from else "00000000000000"
-            to_str = date_to.replace("-", "") + "235959" if date_to else "99991231235959"
-            search_query += f" AND submittedDate:[{from_str} TO {to_str}]"
+            from datetime import datetime
+            from_str = None
+            to_str = None
+            if date_from:
+                try:
+                    from_str = datetime.strptime(date_from, "%Y-%m-%d").strftime("%Y%m%d") + "000000"
+                except ValueError:
+                    logger.warning(f"Invalid date_from value ignored: {date_from!r}")
+            if date_to:
+                try:
+                    to_str = datetime.strptime(date_to, "%Y-%m-%d").strftime("%Y%m%d") + "235959"
+                except ValueError:
+                    logger.warning(f"Invalid date_to value ignored: {date_to!r}")
+            if from_str or to_str:
+                from_str = from_str or "00000000000000"
+                to_str = to_str or "99991231235959"
+                search_query += f" AND submittedDate:[{from_str} TO {to_str}]"
 
         params = {
             "search_query": search_query,

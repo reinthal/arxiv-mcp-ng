@@ -1,6 +1,6 @@
 # arXiv MCP Server
 
-A [FastMCP](https://github.com/jlowin/fastmcp) server that provides tools for converting arXiv academic papers to Markdown format using the [arxiv2md](https://pypi.org/project/arxiv2md/) package.
+A [FastMCP](https://github.com/jlowin/fastmcp) server that provides tools for converting arXiv academic papers to Markdown format using the [arxiv2md.org](https://arxiv2md.org) API.
 
 **Key Features:**
 - Convert arXiv papers from LaTeX to Markdown
@@ -44,22 +44,6 @@ Generate various arXiv URLs from a paper ID.
 - Dictionary with `abstract`, `pdf`, and `source` URLs
 
 ## Installation
-
-### Prerequisites
-
-The arxiv2md package requires `latexml` to be installed on your system:
-
-**macOS:**
-```bash
-brew install latexml
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update && sudo apt install latexml
-```
-
-### Python Dependencies
 
 This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management.
 
@@ -183,21 +167,18 @@ All three tools (`convert_arxiv_to_markdown`, `extract_arxiv_id`, `build_arxiv_u
 
 ## Limitations
 
-Based on the arxiv2md package:
+Based on the arxiv2md.org API:
 
 - Papers without LaTeX source cannot be converted (some older papers only have PDFs)
-- Figures and tables are ignored in the conversion
-- Reference citations may display incorrectly for papers not using BibTeX
-- Large papers may require significant processing time
+- Large papers may require significant processing time (up to 2 minutes)
+- Requires internet connection to access the API
 
 ## Requirements
 
-- Python >= 3.10
-- latexml system package
+- Python >= 3.11
 - fastmcp >= 3.0.0
-- arxiv2md >= 0.1.0
+- httpx >= 0.27.0
 - pydantic >= 2.0.0
-- tenacity >= 8.0.0 (for rate limiting)
 
 ## License
 

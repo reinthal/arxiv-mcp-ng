@@ -4,22 +4,10 @@ Get started with the arXiv MCP server in just a few minutes!
 
 ## Prerequisites
 
-1. **Install uv** (Python package manager):
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-2. **Install latexml** (required for converting LaTeX to Markdown):
-
-   **macOS:**
-   ```bash
-   brew install latexml
-   ```
-
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt update && sudo apt install latexml
-   ```
+**Install uv** (Python package manager):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
 ## Setup
 
@@ -129,16 +117,9 @@ Claude will use the `convert_arxiv_to_markdown` tool and return the paper in Mar
 
 ## Troubleshooting
 
-### "arxiv2md package not installed"
+### "Failed to convert arXiv paper"
 
-Make sure you've installed the dependencies:
-```bash
-uv sync
-```
-
-### "latexml: command not found"
-
-Install latexml for your system (see Prerequisites above).
+Make sure you have an internet connection and the paper has LaTeX source available.
 
 ### Server doesn't appear in Claude Desktop
 
@@ -189,5 +170,5 @@ make format          # Format code with ruff
 
 If you encounter issues:
 1. Check the [Limitations](README.md#limitations) section in the README
-2. Ensure latexml is properly installed
-3. Verify the arXiv paper has LaTeX source available (not all do)
+2. Verify the arXiv paper has LaTeX source available (not all do)
+3. Ensure you have internet connection to access the arxiv2md.org API

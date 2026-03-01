@@ -3,7 +3,7 @@
 FastMCP server for arxiv-mcp-ng - Convert arXiv papers to Markdown format.
 
 This server exposes tools to convert arXiv papers from LaTeX source to Markdown
-using the arxiv2md package with centralized rate limiting (3 requests/second).
+using the arxiv2md.org API with centralized rate limiting (3 requests/second).
 """
 
 from fastmcp import FastMCP
@@ -118,46 +118,83 @@ class ArxivConversionResult(BaseModel):
 
 @mcp.tool()
 @rate_limited
-async def convert_arxiv_to_markdown(arxiv_url: str) -> ArxivConversionResult:
+async def convert_arxiv_to_markdown(
+    arxiv_url: str,
+    remove_refs: bool = True,
+    remove_toc: bool = False,
+    remove_inline_citations: bool = True,
+    section_filter_mode: str = "exclude",
+    sections: list[str] = []
+) -> ArxivConversionResult:
     """
-    Convert an arXiv paper to Markdown format.
+    Convert an arXiv paper to Markdown format using the arxiv2md.org API.
 
-    This tool takes an arXiv URL (abstract page, PDF page, or source URL) and converts
-    the paper's LaTeX source to Markdown format. The conversion uses latexml to process
-    the LaTeX source.
+    This tool takes an arXiv URL and converts the paper to Markdown format via the
+    arxiv2md.org API service.
 
     Rate Limited: This tool is subject to a server-wide rate limit of 3 requests/second.
 
     Args:
         arxiv_url: The arXiv URL (e.g., https://arxiv.org/abs/1706.03762)
+        remove_refs: Remove references section (default: True)
+        remove_toc: Remove table of contents (default: False)
+        remove_inline_citations: Remove inline citations (default: True)
+        section_filter_mode: How to filter sections - "exclude" or "include" (default: "exclude")
+        sections: List of section names to filter (default: [])
 
     Returns:
         ArxivConversionResult containing the markdown content and metadata
 
     Note:
         - Papers without LaTeX source cannot be converted
-        - Figures and tables are ignored in the conversion
         - Large papers may take significant time to process
+        - This uses the arxiv2md.org API service
 
     Example:
         convert_arxiv_to_markdown("https://arxiv.org/abs/1706.03762")
     """
-    try:
-        from arxiv2md import arxiv2md
+    import httpx
 
+    try:
         logger.info(f"Converting arXiv paper: {arxiv_url}")
 
-        # Call arxiv2md to convert the paper
-        # Run the blocking operation in a thread pool
-        loop = asyncio.get_event_loop()
-        markdown, metadata = await loop.run_in_executor(None, arxiv2md, arxiv_url)
+        # Prepare API request
+        api_url = "https://arxiv2md.org/api/ingest"
+        payload = {
+            "input_text": arxiv_url,
+            "remove_refs": remove_refs,
+            "remove_toc": remove_toc,
+            "remove_inline_citations": remove_inline_citations,
+            "section_filter_mode": section_filter_mode,
+            "sections": sections
+        }
+
+        # Make async API request with timeout
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(api_url, json=payload)
+            response.raise_for_status()
+            result = response.json()
 
         logger.info(f"Successfully converted paper from {arxiv_url}")
 
-        # Extract metadata fields if available
-        title = metadata.get("title") if metadata else None
-        authors = metadata.get("authors") if metadata else None
-        abstract = metadata.get("abstract") if metadata else None
+        # Extract data from API response
+        markdown = result.get("content", "")
+        title = result.get("title")
+
+        # Parse authors from summary if available
+        summary = result.get("summary", "")
+        authors = None
+        if summary and "Authors:" in summary:
+            # Extract authors line from summary
+            for line in summary.split("\n"):
+                if line.startswith("Authors:"):
+                    authors_str = line.replace("Authors:", "").strip()
+                    # Split by comma and clean up
+                    authors = [a.strip() for a in authors_str.split(",")]
+                    break
+
+        # Abstract is not provided by this API
+        abstract = None
 
         return ArxivConversionResult(
             markdown=markdown,
@@ -167,13 +204,17 @@ async def convert_arxiv_to_markdown(arxiv_url: str) -> ArxivConversionResult:
             url=arxiv_url
         )
 
-    except ImportError as e:
-        logger.error("arxiv2md package not installed")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"API request failed with status {e.response.status_code}: {e}")
         raise RuntimeError(
-            "arxiv2md package is required. Install with: pip install arxiv2md\n"
-            "Also ensure latexml is installed on your system:\n"
-            "  macOS: brew install latexml\n"
-            "  Ubuntu: sudo apt install latexml"
+            f"Failed to convert arXiv paper. API returned status {e.response.status_code}. "
+            f"The paper may not have LaTeX source available or the API may be unavailable."
+        ) from e
+    except httpx.TimeoutException as e:
+        logger.error(f"API request timed out: {e}")
+        raise RuntimeError(
+            "Conversion timed out. Large papers may take a while to process. "
+            "Please try again or use a smaller paper."
         ) from e
     except Exception as e:
         logger.error(f"Error converting arXiv paper: {e}")

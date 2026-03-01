@@ -7,9 +7,6 @@
 }: {
   packages = [
     pkgs.git
-    (pkgs.perl5Packages.LaTeXML.overrideAttrs (oldAttrs: {
-      doCheck = false; # Skip tests that are failing
-    }))
   ];
 
   languages.python = {
@@ -80,7 +77,6 @@
     echo "Tools installed:"
     echo "  Python:  $(python --version | cut -d' ' -f2)"
     echo "  uv:      $(uv --version | cut -d' ' -f2)"
-    echo "  LaTeXML: $(latexml --VERSION 2>&1 | head -1)"
     echo ""
     echo "📋 Type 'menu' to see all available commands"
     echo ""
